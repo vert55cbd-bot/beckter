@@ -1,0 +1,15 @@
+[
+    {
+        "nom": "LEFEBVRE",
+        "prenom": "Gilles",
+        "date_naissance": "1967-08-14T00:00:00+01:00",
+        "age": 57,
+        "email": "mjg.lefebvre@orange.fr",
+        "telephone": "0675215403",
+        "adresse": "14 14 ALLEE DES AULNES",
+        "code_postal": "91630",
+        "ville": "MAROLLES EN HUREPOIX",
+        "iban": "FR7617515900000404240376321",
+        "bic": "CEPAFRPP751"
+    }
+]
