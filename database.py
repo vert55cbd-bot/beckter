@@ -84,6 +84,39 @@ def get_client_count():
     return count
 
 
+IDF_DEPTS = ("75", "77", "78", "91", "92", "93", "94", "95")
+
+
+def _region_filter(region: str) -> str:
+    """Return SQL WHERE clause for region filtering."""
+    if region == "IDF":
+        clauses = " OR ".join(f"code_postal LIKE '{d}%'" for d in IDF_DEPTS)
+        return f"({clauses})"
+    elif region == "HORS_IDF":
+        clauses = " AND ".join(f"code_postal NOT LIKE '{d}%'" for d in IDF_DEPTS)
+        return f"({clauses} AND code_postal != '')"
+    return "1=1"
+
+
+def get_leads_count(region: str = "ALL") -> int:
+    conn = get_connection()
+    cursor = conn.execute(f"SELECT COUNT(*) FROM clients WHERE {_region_filter(region)}")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+
+def get_leads(region: str = "ALL", batch_size: int = 100) -> list:
+    conn = get_connection()
+    cursor = conn.execute(
+        f"SELECT * FROM clients WHERE {_region_filter(region)} ORDER BY RANDOM() LIMIT ?",
+        (batch_size,)
+    )
+    results = cursor.fetchall()
+    conn.close()
+    return results
+
+
 def clear_db():
     conn = get_connection()
     conn.execute("DELETE FROM clients")

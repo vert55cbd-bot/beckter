@@ -1,16 +1,21 @@
+import io
 import os
 import re
 import json
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     filters,
     ContextTypes,
 )
-from database import init_db, search_by_phone, insert_client, get_client_count, clear_db, normalize_phone
+from database import (
+    init_db, search_by_phone, insert_client, get_client_count,
+    clear_db, normalize_phone, get_leads, get_leads_count,
+)
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -60,6 +65,9 @@ def format_client(client) -> str:
     return msg
 
 
+REGION_LABELS = {"IDF": "Ile-de-France", "HORS_IDF": "Hors IDF", "ALL": "Toute la France"}
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = get_client_count()
     await update.message.reply_text(
@@ -67,11 +75,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"\U0001F4CA Base de donn\u00e9es : *{count}* fiches\n\n"
         f"*Commandes :*\n"
         f"/start \u2014 Afficher ce message\n"
+        f"/generate \u2014 G\u00e9n\u00e9rer des leads\n"
         f"/stats \u2014 Nombre de fiches en base\n"
         f"/clear \u2014 Vider la base de donn\u00e9es\n\n"
         f"*Utilisation :*\n"
         f"\u2022 Collez un num\u00e9ro de t\u00e9l\u00e9phone \u2192 fiche client\n"
-        f"\u2022 Envoyez un fichier JSON \u2192 import des fiches",
+        f"\u2022 Envoyez un fichier JSON \u2192 import des fiches\n"
+        f"\u2022 /generate \u2192 exporter des leads par lot",
         parse_mode="Markdown",
     )
 
@@ -90,6 +100,119 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\U0001F5D1\uFE0F Base de donn\u00e9es vid\u00e9e.",
         parse_mode="Markdown",
     )
+
+
+async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show region selection for lead generation."""
+    idf_count = get_leads_count("IDF")
+    hors_count = get_leads_count("HORS_IDF")
+    total = get_client_count()
+
+    keyboard = [
+        [
+            InlineKeyboardButton(f"\U0001F3D9 IDF ({idf_count})", callback_data="gen_region_IDF"),
+            InlineKeyboardButton(f"\U0001F30D Hors IDF ({hors_count})", callback_data="gen_region_HORS_IDF"),
+        ],
+        [
+            InlineKeyboardButton(f"\U0001F1EB\U0001F1F7 Tous ({total})", callback_data="gen_region_ALL"),
+        ],
+    ]
+
+    await update.message.reply_text(
+        "\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+        "\U0001F50D S\u00e9lectionnez la r\u00e9gion :",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown",
+    )
+
+
+async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline keyboard button presses for /generate."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    # Step 1: Region selected -> show batch size
+    if data.startswith("gen_region_"):
+        region = data.replace("gen_region_", "")
+        context.user_data["gen_region"] = region
+        label = REGION_LABELS.get(region, region)
+        count = get_leads_count(region)
+
+        keyboard = [
+            [
+                InlineKeyboardButton("100", callback_data="gen_batch_100"),
+                InlineKeyboardButton("500", callback_data="gen_batch_500"),
+                InlineKeyboardButton("1000", callback_data="gen_batch_1000"),
+            ],
+        ]
+
+        await query.edit_message_text(
+            f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            f"\U0001F4CD R\u00e9gion : *{label}* ({count} dispo)\n\n"
+            f"\U0001F522 Combien de leads ?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    # Step 2: Batch size selected -> generate & send file
+    elif data.startswith("gen_batch_"):
+        batch_size = int(data.replace("gen_batch_", ""))
+        region = context.user_data.get("gen_region", "ALL")
+        label = REGION_LABELS.get(region, region)
+
+        await query.edit_message_text(
+            f"\u23F3 G\u00e9n\u00e9ration de *{batch_size}* leads ({label})...",
+            parse_mode="Markdown",
+        )
+
+        leads = get_leads(region, batch_size)
+
+        if not leads:
+            await query.edit_message_text(
+                f"\u274C Aucun lead trouv\u00e9 pour *{label}*.",
+                parse_mode="Markdown",
+            )
+            return
+
+        # Build export file
+        lines = [f"{'='*50}", f"  LEADS SG - {label} - {len(leads)} fiches", f"{'='*50}\n"]
+
+        for i, c in enumerate(leads, 1):
+            lines.append(f"{i}. {c['nom']} {c['prenom']}")
+            if c["telephone"]:
+                lines.append(f"   Tel: {c['telephone']}")
+            if c["email"]:
+                lines.append(f"   Email: {c['email']}")
+            if c["date_naissance"]:
+                lines.append(f"   N\u00e9(e): {c['date_naissance']}")
+            addr_parts = []
+            if c["adresse"]:
+                addr_parts.append(c["adresse"])
+            if c["code_postal"]:
+                addr_parts.append(c["code_postal"])
+            if c["ville"]:
+                addr_parts.append(c["ville"])
+            if addr_parts:
+                lines.append(f"   Adresse: {', '.join(addr_parts)}")
+            if c["iban"]:
+                lines.append(f"   IBAN: {c['iban']}")
+            lines.append(f"{'─'*40}")
+
+        content = "\n".join(lines)
+        file_buf = io.BytesIO(content.encode("utf-8"))
+        region_tag = region.lower().replace("_", "-")
+        file_buf.name = f"leads-sg-{region_tag}-{len(leads)}.txt"
+
+        await query.edit_message_text(
+            f"\u2705 *{len(leads)}* leads g\u00e9n\u00e9r\u00e9s ({label})",
+            parse_mode="Markdown",
+        )
+        await query.message.reply_document(
+            document=file_buf,
+            filename=file_buf.name,
+            caption=f"\U0001F4C4 {len(leads)} leads SG \u2014 {label}",
+        )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -200,8 +323,10 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("generate", generate_command))
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("clear", clear_command))
+    app.add_handler(CallbackQueryHandler(handle_generate_callback, pattern=r"^gen_"))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
