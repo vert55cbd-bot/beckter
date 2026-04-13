@@ -66,6 +66,7 @@ def format_client(client) -> str:
 
 
 REGION_LABELS = {"IDF": "Ile-de-France", "HORS_IDF": "Hors IDF", "ALL": "Toute la France"}
+NAME_LABELS = {"ARABE": "Noms arabes", "FRANCAIS": "Noms fran\u00e7ais", "ALL": "Tous"}
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -132,12 +133,42 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     data = query.data
 
-    # Step 1: Region selected -> show batch size
+    # Step 1: Region selected -> show name filter
     if data.startswith("gen_region_"):
         region = data.replace("gen_region_", "")
         context.user_data["gen_region"] = region
-        label = REGION_LABELS.get(region, region)
-        count = get_leads_count(region)
+        region_label = REGION_LABELS.get(region, region)
+
+        arabe_count = get_leads_count(region, "ARABE")
+        francais_count = get_leads_count(region, "FRANCAIS")
+        all_count = get_leads_count(region, "ALL")
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"\U0001F1E9\U0001F1FF Arabe ({arabe_count})", callback_data="gen_name_ARABE"),
+                InlineKeyboardButton(f"\U0001F1EB\U0001F1F7 Fran\u00e7ais ({francais_count})", callback_data="gen_name_FRANCAIS"),
+            ],
+            [
+                InlineKeyboardButton(f"\U0001F465 Tous ({all_count})", callback_data="gen_name_ALL"),
+            ],
+        ]
+
+        await query.edit_message_text(
+            f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            f"\U0001F4CD R\u00e9gion : *{region_label}*\n\n"
+            f"\U0001F464 Filtrer par type de nom :",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    # Step 2: Name filter selected -> show batch size
+    elif data.startswith("gen_name_"):
+        name_type = data.replace("gen_name_", "")
+        context.user_data["gen_name"] = name_type
+        region = context.user_data.get("gen_region", "ALL")
+        region_label = REGION_LABELS.get(region, region)
+        name_label = NAME_LABELS.get(name_type, name_type)
+        count = get_leads_count(region, name_type)
 
         keyboard = [
             [
@@ -149,34 +180,43 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
 
         await query.edit_message_text(
             f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
-            f"\U0001F4CD R\u00e9gion : *{label}* ({count} dispo)\n\n"
+            f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
+            f"\U0001F464 Noms : *{name_label}* ({count} dispo)\n\n"
             f"\U0001F522 Combien de leads ?",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
 
-    # Step 2: Batch size selected -> generate & send file
+    # Step 3: Batch size selected -> generate & send file
     elif data.startswith("gen_batch_"):
         batch_size = int(data.replace("gen_batch_", ""))
         region = context.user_data.get("gen_region", "ALL")
-        label = REGION_LABELS.get(region, region)
+        name_type = context.user_data.get("gen_name", "ALL")
+        region_label = REGION_LABELS.get(region, region)
+        name_label = NAME_LABELS.get(name_type, name_type)
 
         await query.edit_message_text(
-            f"\u23F3 G\u00e9n\u00e9ration de *{batch_size}* leads ({label})...",
+            f"\u23F3 G\u00e9n\u00e9ration de *{batch_size}* leads...\n"
+            f"\U0001F4CD {region_label} | \U0001F464 {name_label}",
             parse_mode="Markdown",
         )
 
-        leads = get_leads(region, batch_size)
+        leads = get_leads(region, batch_size, name_type)
 
         if not leads:
             await query.edit_message_text(
-                f"\u274C Aucun lead trouv\u00e9 pour *{label}*.",
+                f"\u274C Aucun lead trouv\u00e9 pour *{region_label}* / *{name_label}*.",
                 parse_mode="Markdown",
             )
             return
 
         # Build export file
-        lines = [f"{'='*50}", f"  LEADS SG - {label} - {len(leads)} fiches", f"{'='*50}\n"]
+        lines = [
+            f"{'='*50}",
+            f"  LEADS SG - {region_label} - {name_label}",
+            f"  {len(leads)} fiches",
+            f"{'='*50}\n",
+        ]
 
         for i, c in enumerate(leads, 1):
             lines.append(f"{i}. {c['nom']} {c['prenom']}")
@@ -202,16 +242,18 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         content = "\n".join(lines)
         file_buf = io.BytesIO(content.encode("utf-8"))
         region_tag = region.lower().replace("_", "-")
-        file_buf.name = f"leads-sg-{region_tag}-{len(leads)}.txt"
+        name_tag = name_type.lower()
+        file_buf.name = f"leads-sg-{region_tag}-{name_tag}-{len(leads)}.txt"
 
         await query.edit_message_text(
-            f"\u2705 *{len(leads)}* leads g\u00e9n\u00e9r\u00e9s ({label})",
+            f"\u2705 *{len(leads)}* leads g\u00e9n\u00e9r\u00e9s\n"
+            f"\U0001F4CD {region_label} | \U0001F464 {name_label}",
             parse_mode="Markdown",
         )
         await query.message.reply_document(
             document=file_buf,
             filename=file_buf.name,
-            caption=f"\U0001F4C4 {len(leads)} leads SG \u2014 {label}",
+            caption=f"\U0001F4C4 {len(leads)} leads SG \u2014 {region_label} \u2014 {name_label}",
         )
 
 
