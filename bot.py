@@ -91,25 +91,26 @@ NAME_LABELS = {"ARABE": "Noms arabes", "FRANCAIS": "Noms fran\u00e7ais", "ALL": 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = get_client_count()
     banques = get_available_banques()
-    banques_str = " | ".join(f"`{b}` ({c:,})" for b, c in banques) if banques else "Aucune"
+    nb_banques = len(banques)
 
     await update.message.reply_text(
-        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
-        f"\u26A1 *BECKS \u2022 LEAD MANAGER*\n"
-        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n"
-        f"\U0001F4BE *Base de donn\u00e9es*\n"
-        f"\u251C \U0001F4CA Fiches : *{count:,}*\n"
-        f"\u2514 \U0001F3E6 Banques : {banques_str}\n\n"
-        f"\u2699\uFE0F *Commandes*\n"
-        f"\u251C \U0001F50D /generate \u2500 G\u00e9n\u00e9rer des leads\n"
-        f"\u251C \U0001F4C8 /stats \u2500 Statistiques\n"
-        f"\u2514 \U0001F5D1 /clear \u2500 R\u00e9initialiser la base\n\n"
-        f"\U0001F4F2 *Recherche rapide*\n"
-        f"\u251C Envoyez un *num\u00e9ro de t\u00e9l\u00e9phone* \u2192 fiche client\n"
-        f"\u2514 Envoyez un *fichier JSON* \u2192 import auto\n\n"
-        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
-        f"\U0001F511 *Powered by Becks*",
+        f"\u200E\n"
+        f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
+        f"        \u26A1\uFE0F  *B E C K S*\n"
+        f"        _Lead Manager Pro_\n\n"
+        f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
+        f"\U0001F4BE  *{count:,}*  fiches en base\n"
+        f"\U0001F3E6  *{nb_banques}*  banque{'s' if nb_banques > 1 else ''} connect\u00e9e{'s' if nb_banques > 1 else ''}\n\n"
+        f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
+        f"_Collez un num\u00e9ro \u2192 recherche instantan\u00e9e_\n",
         parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("\u26A1 G\u00e9n\u00e9rer des Leads", callback_data="start_generate")],
+            [
+                InlineKeyboardButton("\U0001F4C8 Stats", callback_data="start_stats"),
+                InlineKeyboardButton("\U0001F3E6 Banques", callback_data="start_banques"),
+            ],
+        ]),
     )
 
 
@@ -142,6 +143,84 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await update.message.reply_text(msg, parse_mode="Markdown")
+
+
+async def handle_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle start menu button presses."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "start_generate":
+        # Trigger generate flow
+        banques = get_available_banques()
+        if not banques:
+            await query.edit_message_text("\u274C Aucune banque en base.", parse_mode="Markdown")
+            return
+
+        keyboard = []
+        row = []
+        for banque, cnt in banques:
+            icon = BANQUE_ICONS.get(banque, "\U0001F3E6")
+            row.append(InlineKeyboardButton(f"{icon} {banque} ({cnt:,})", callback_data=f"gen_banque_{banque}"))
+            if len(row) == 2:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+        total = get_client_count()
+        keyboard.append([InlineKeyboardButton(f"\U0001F4CA Toutes ({total:,})", callback_data="gen_banque_ALL")])
+
+        await query.edit_message_text(
+            "\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            "\U0001F3E6 S\u00e9lectionnez la banque :",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    elif data == "start_stats":
+        count = get_client_count()
+        banques = get_available_banques()
+        idf = get_leads_count("IDF")
+        hors = get_leads_count("HORS_IDF")
+
+        msg = (
+            f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
+            f"        \U0001F4C8  *STATISTIQUES*\n\n"
+            f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
+            f"\U0001F4BE  Total : *{count:,}* fiches\n\n"
+        )
+        if banques:
+            for b, c in banques:
+                pct = round(c / count * 100, 1) if count else 0
+                msg += f"\U0001F3E6  `{b}` \u2014 *{c:,}* _{pct}%_\n"
+            msg += "\n"
+        msg += (
+            f"\U0001F3D9  IDF \u2014 *{idf:,}*\n"
+            f"\U0001F30D  Hors IDF \u2014 *{hors:,}*\n"
+        )
+        await query.edit_message_text(msg, parse_mode="Markdown")
+
+    elif data == "start_banques":
+        banques = get_available_banques()
+        if not banques:
+            await query.edit_message_text("\u274C Aucune banque en base.", parse_mode="Markdown")
+            return
+
+        msg = (
+            f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
+            f"        \U0001F3E6  *BANQUES*\n\n"
+            f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
+        )
+        for b, c in banques:
+            icon = BANQUE_ICONS.get(b, "\U0001F3E6")
+            idf_c = get_leads_count("IDF", "ALL", b)
+            hors_c = get_leads_count("HORS_IDF", "ALL", b)
+            msg += (
+                f"{icon}  *{b}* \u2014 `{c:,}` fiches\n"
+                f"      \U0001F3D9 IDF `{idf_c:,}` | \U0001F30D Hors `{hors_c:,}`\n\n"
+            )
+        await query.edit_message_text(msg, parse_mode="Markdown")
 
 
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -463,6 +542,7 @@ def main():
     app.add_handler(CommandHandler("generate", generate_command))
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("clear", clear_command))
+    app.add_handler(CallbackQueryHandler(handle_start_callback, pattern=r"^start_"))
     app.add_handler(CallbackQueryHandler(handle_generate_callback, pattern=r"^gen_"))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
