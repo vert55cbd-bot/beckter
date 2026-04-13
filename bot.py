@@ -298,7 +298,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             parse_mode="Markdown",
         )
 
-    # Step 2: Region selected -> show name filter
+    # Step 2: Region selected -> show name filter (no counts - too slow with LIKE)
     elif data.startswith("gen_region_"):
         region = data.replace("gen_region_", "")
         context.user_data["gen_region"] = region
@@ -306,17 +306,13 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
 
-        arabe_count = get_leads_count(region, "ARABE", banque)
-        francais_count = get_leads_count(region, "FRANCAIS", banque)
-        all_count = get_leads_count(region, "ALL", banque)
-
         keyboard = [
             [
-                InlineKeyboardButton(f"\U0001F1E9\U0001F1FF Arabe ({arabe_count})", callback_data="gen_name_ARABE"),
-                InlineKeyboardButton(f"\U0001F1EB\U0001F1F7 Fran\u00e7ais ({francais_count})", callback_data="gen_name_FRANCAIS"),
+                InlineKeyboardButton("\U0001F1E9\U0001F1FF Arabe", callback_data="gen_name_ARABE"),
+                InlineKeyboardButton("\U0001F1EB\U0001F1F7 Fran\u00e7ais", callback_data="gen_name_FRANCAIS"),
             ],
             [
-                InlineKeyboardButton(f"\U0001F465 Tous ({all_count})", callback_data="gen_name_ALL"),
+                InlineKeyboardButton("\U0001F465 Tous", callback_data="gen_name_ALL"),
             ],
         ]
 
@@ -338,7 +334,6 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
         name_label = NAME_LABELS.get(name_type, name_type)
-        count = get_leads_count(region, name_type, banque)
 
         keyboard = [
             [
@@ -352,7 +347,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
             f"\U0001F3E6 Banque : *{banque_label}*\n"
             f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
-            f"\U0001F464 Noms : *{name_label}* ({count} dispo)\n\n"
+            f"\U0001F464 Noms : *{name_label}*\n\n"
             f"\U0001F522 Combien de leads ?",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
