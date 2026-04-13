@@ -37,6 +37,13 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
     conn.execute("CREATE INDEX IF NOT EXISTS idx_banque ON clients(banque)")
+    # Migration: add name_type column if missing
+    try:
+        conn.execute("ALTER TABLE clients ADD COLUMN name_type TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_name_type ON clients(name_type)")
     conn.commit()
     conn.close()
 
@@ -158,19 +165,24 @@ ARABIC_PREFIXES = (
 
 def _name_filter(name_type: str) -> str:
     """Return SQL WHERE clause for name type filtering."""
-    if name_type == "ARABE":
-        clauses = " OR ".join(
-            f"UPPER(nom) LIKE '{p}%' OR UPPER(prenom) LIKE '{p}%'"
-            for p in ARABIC_PREFIXES
-        )
-        return f"({clauses})"
-    elif name_type == "FRANCAIS":
-        clauses = " AND ".join(
-            f"UPPER(nom) NOT LIKE '{p}%' AND UPPER(prenom) NOT LIKE '{p}%'"
-            for p in ARABIC_PREFIXES
-        )
-        return f"({clauses})"
+    if name_type in ("ARABE", "FRANCAIS"):
+        return f"name_type = '{name_type}'"
     return "1=1"
+
+
+def classify_name(nom: str, prenom: str) -> str:
+    """Classify a name as ARABE or FRANCAIS."""
+    # Clean and uppercase
+    nom_clean = "".join(c for c in nom.upper() if c.isalpha() or c == " ").strip()
+    prenom_clean = "".join(c for c in prenom.upper() if c.isalpha() or c == " ").strip()
+
+    for name in (nom_clean, prenom_clean):
+        if not name:
+            continue
+        for prefix in ARABIC_PREFIXES:
+            if name.startswith(prefix):
+                return "ARABE"
+    return "FRANCAIS"
 
 
 def _banque_filter(banque: str) -> str:
@@ -204,7 +216,7 @@ def get_leads(region: str = "ALL", batch_size: int = 100, name_type: str = "ALL"
     conn = get_connection()
     where = f"{_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
     cursor = conn.execute(
-        f"SELECT * FROM clients WHERE {where} ORDER BY nom, prenom LIMIT ?",
+        f"SELECT * FROM clients WHERE {where} ORDER BY RANDOM() LIMIT ?",
         (batch_size,)
     )
     results = cursor.fetchall()
