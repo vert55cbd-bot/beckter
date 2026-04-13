@@ -44,6 +44,13 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     conn.execute("CREATE INDEX IF NOT EXISTS idx_name_type ON clients(name_type)")
+    # Migration: add used column if missing
+    try:
+        conn.execute("ALTER TABLE clients ADD COLUMN used INTEGER DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_used ON clients(used)")
     conn.commit()
     conn.close()
 
@@ -205,7 +212,7 @@ def get_available_banques() -> list:
 
 def get_leads_count(region: str = "ALL", name_type: str = "ALL", banque: str = "ALL") -> int:
     conn = get_connection()
-    where = f"{_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
+    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
     cursor = conn.execute(f"SELECT COUNT(*) FROM clients WHERE {where}")
     count = cursor.fetchone()[0]
     conn.close()
@@ -214,14 +221,35 @@ def get_leads_count(region: str = "ALL", name_type: str = "ALL", banque: str = "
 
 def get_leads(region: str = "ALL", batch_size: int = 100, name_type: str = "ALL", banque: str = "ALL") -> list:
     conn = get_connection()
-    where = f"{_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
+    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
     cursor = conn.execute(
         f"SELECT * FROM clients WHERE {where} ORDER BY RANDOM() LIMIT ?",
         (batch_size,)
     )
     results = cursor.fetchall()
+    # Mark as used
+    if results:
+        ids = [(row["id"],) for row in results]
+        conn.executemany("UPDATE clients SET used = 1 WHERE id = ?", ids)
+        conn.commit()
     conn.close()
     return results
+
+
+def get_used_count() -> int:
+    conn = get_connection()
+    cursor = conn.execute("SELECT COUNT(*) FROM clients WHERE used = 1")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+
+def reset_used():
+    """Reset all leads back to available."""
+    conn = get_connection()
+    conn.execute("UPDATE clients SET used = 0")
+    conn.commit()
+    conn.close()
 
 
 def clear_db():

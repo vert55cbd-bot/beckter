@@ -15,7 +15,7 @@ from telegram.ext import (
 from database import (
     init_db, search_by_phone, insert_client, get_client_count,
     clear_db, normalize_phone, get_leads, get_leads_count,
-    get_available_banques,
+    get_available_banques, get_used_count, reset_used,
 )
 
 # Logging
@@ -90,6 +90,8 @@ NAME_LABELS = {"ARABE": "Noms arabes", "FRANCAIS": "Noms fran\u00e7ais", "ALL": 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = get_client_count()
+    used = get_used_count()
+    dispo = count - used
     banques = get_available_banques()
     nb_banques = len(banques)
 
@@ -99,8 +101,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"        \u26A1\uFE0F  *B E C K S*\n"
         f"        _Lead Manager Pro_\n\n"
         f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
-        f"\U0001F4BE  *{count:,}*  fiches en base\n"
-        f"\U0001F3E6  *{nb_banques}*  banque{'s' if nb_banques > 1 else ''} connect\u00e9e{'s' if nb_banques > 1 else ''}\n\n"
+        f"\U0001F7E2  *{dispo:,}*  leads disponibles\n"
+        f"\U0001F534  *{used:,}*  leads utilis\u00e9es\n"
+        f"\U0001F4BE  *{count:,}*  total en base\n\n"
         f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
         f"_Collez un num\u00e9ro \u2192 recherche instantan\u00e9e_\n",
         parse_mode="Markdown",
@@ -110,6 +113,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("\U0001F4C8 Stats", callback_data="start_stats"),
                 InlineKeyboardButton("\U0001F3E6 Banques", callback_data="start_banques"),
             ],
+            [InlineKeyboardButton("\U0001F504 Reset leads utilis\u00e9es", callback_data="start_reset")],
         ]),
     )
 
@@ -221,6 +225,15 @@ async def handle_start_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 f"      \U0001F3D9 IDF `{idf_c:,}` | \U0001F30D Hors `{hors_c:,}`\n\n"
             )
         await query.edit_message_text(msg, parse_mode="Markdown")
+
+    elif data == "start_reset":
+        reset_used()
+        count = get_client_count()
+        await query.edit_message_text(
+            f"\U0001F504 *Leads r\u00e9initialis\u00e9es !*\n\n"
+            f"\U0001F7E2 *{count:,}* leads de nouveau disponibles.",
+            parse_mode="Markdown",
+        )
 
 
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
