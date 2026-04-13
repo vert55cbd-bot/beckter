@@ -30,38 +30,56 @@ PHONE_REGEX = re.compile(r"(?:\+33|0033|0)\s*[1-9](?:[\s.\-]?\d{2}){4}")
 
 
 def format_client(client) -> str:
-    """Format a client record into a nice Telegram message."""
-    # Format date of birth (remove time part if present)
+    """Format a client record into a premium Telegram message."""
     dob = client["date_naissance"]
     if dob and "T" in dob:
         dob = dob.split("T")[0]
 
-    msg = f"\U0001F4C4 *Fiche trouv\u00e9e*\n\n"
-    msg += f"\U0001F464 *Infos personnelles*\n"
-    msg += f"\u2022 *Nom :* `{client['nom']}`\n"
-    msg += f"\u2022 *Pr\u00e9nom :* `{client['prenom']}`\n"
-
     dob_display = dob if (dob and dob.strip() and dob != "N/A") else "N/A"
     age_display = client["age"] if (client["age"] and int(client["age"]) > 0) else "N/A"
-    msg += f"\u2022 *Date de naissance :* `{dob_display}`\n"
-    msg += f"\u2022 *\u00c2ge :* `{age_display}`\n"
+    banque = client["banque"] if client["banque"] else "N/A"
 
+    msg = (
+        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
+        f"\U0001F4CB *FICHE CLIENT*\n"
+        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n"
+        f"\U0001F464 *Identit\u00e9*\n"
+        f"\u251C \U0001F4DD Nom : `{client['nom']}`\n"
+        f"\u251C \U0001F4DD Pr\u00e9nom : `{client['prenom']}`\n"
+        f"\u251C \U0001F382 N\u00e9(e) : `{dob_display}`\n"
+        f"\u2514 \U0001F522 \u00c2ge : `{age_display}`\n\n"
+        f"\U0001F4F2 *Contact*\n"
+        f"\u251C \U0001F4F1 T\u00e9l : `{client['telephone']}`\n"
+    )
     if client["email"]:
-        msg += f"\u2022 \U0001F4E7 *Email :* `{client['email']}`\n"
-    msg += f"\u2022 \U0001F4F1 *T\u00e9l\u00e9phone :* `{client['telephone']}`\n"
+        msg += f"\u2514 \u2709\uFE0F Email : `{client['email']}`\n"
+    else:
+        msg = msg.rstrip("\n").replace("\u251C \U0001F4F1", "\u2514 \U0001F4F1") + "\n"
 
+    msg += f"\n\U0001F4CD *Adresse*\n"
     if client["adresse"]:
-        msg += f"\u2022 \U0001F3E0 *Adresse :* `{client['adresse']}`\n"
-    if client["code_postal"]:
-        msg += f"\u2022 \U0001F4EE *Code postal :* `{client['code_postal']}`\n"
-    if client["ville"]:
-        msg += f"\u2022 \U0001F3D9\uFE0F *Ville :* `{client['ville']}`\n"
+        msg += f"\u251C \U0001F3E0 `{client['adresse']}`\n"
+    if client["code_postal"] or client["ville"]:
+        ville_str = f"{client['code_postal']} {client['ville']}".strip()
+        msg += f"\u2514 \U0001F3D9\uFE0F `{ville_str}`\n"
 
-    msg += f"\n\U0001F4B3 *Infos bancaires*\n"
+    msg += (
+        f"\n\U0001F4B3 *Bancaire*\n"
+        f"\u251C \U0001F3E6 Banque : `{banque}`\n"
+    )
     if client["iban"]:
-        msg += f"\u2022 *IBAN :* `{client['iban']}`\n"
+        msg += f"\u251C \U0001F4B3 IBAN : `{client['iban']}`\n"
     if client["bic"]:
-        msg += f"\u2022 *BIC :* `{client['bic']}`\n"
+        msg += f"\u2514 \U0001F3F7\uFE0F BIC : `{client['bic']}`\n"
+    else:
+        # Close the last ├ with └
+        msg = msg.rstrip("\n")
+        if msg.endswith("`"):
+            msg = msg.rsplit("\u251C", 1)
+            msg = "\u2514".join(msg)
+        msg += "\n"
+
+    msg += f"\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501"
 
     return msg
 
@@ -72,28 +90,58 @@ NAME_LABELS = {"ARABE": "Noms arabes", "FRANCAIS": "Noms fran\u00e7ais", "ALL": 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = get_client_count()
+    banques = get_available_banques()
+    banques_str = " | ".join(f"`{b}` ({c:,})" for b, c in banques) if banques else "Aucune"
+
     await update.message.reply_text(
-        f"\U0001F916 *Bot Fiches Clients*\n\n"
-        f"\U0001F4CA Base de donn\u00e9es : *{count}* fiches\n\n"
-        f"*Commandes :*\n"
-        f"/start \u2014 Afficher ce message\n"
-        f"/generate \u2014 G\u00e9n\u00e9rer des leads\n"
-        f"/stats \u2014 Nombre de fiches en base\n"
-        f"/clear \u2014 Vider la base de donn\u00e9es\n\n"
-        f"*Utilisation :*\n"
-        f"\u2022 Collez un num\u00e9ro de t\u00e9l\u00e9phone \u2192 fiche client\n"
-        f"\u2022 Envoyez un fichier JSON \u2192 import des fiches\n"
-        f"\u2022 /generate \u2192 exporter des leads par lot",
+        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
+        f"\u26A1 *BECKS \u2022 LEAD MANAGER*\n"
+        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n"
+        f"\U0001F4BE *Base de donn\u00e9es*\n"
+        f"\u251C \U0001F4CA Fiches : *{count:,}*\n"
+        f"\u2514 \U0001F3E6 Banques : {banques_str}\n\n"
+        f"\u2699\uFE0F *Commandes*\n"
+        f"\u251C \U0001F50D /generate \u2500 G\u00e9n\u00e9rer des leads\n"
+        f"\u251C \U0001F4C8 /stats \u2500 Statistiques\n"
+        f"\u2514 \U0001F5D1 /clear \u2500 R\u00e9initialiser la base\n\n"
+        f"\U0001F4F2 *Recherche rapide*\n"
+        f"\u251C Envoyez un *num\u00e9ro de t\u00e9l\u00e9phone* \u2192 fiche client\n"
+        f"\u2514 Envoyez un *fichier JSON* \u2192 import auto\n\n"
+        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
+        f"\U0001F511 *Powered by Becks*",
         parse_mode="Markdown",
     )
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     count = get_client_count()
-    await update.message.reply_text(
-        f"\U0001F4CA *{count}* fiches en base de donn\u00e9es.",
-        parse_mode="Markdown",
+    banques = get_available_banques()
+
+    msg = (
+        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n"
+        f"\U0001F4C8 *STATISTIQUES*\n"
+        f"\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n"
+        f"\U0001F4BE Total : *{count:,}* fiches\n\n"
     )
+    if banques:
+        msg += "\U0001F3E6 *Par banque :*\n"
+        for b, c in banques:
+            pct = round(c / count * 100, 1) if count else 0
+            msg += f"\u251C `{b}` \u2500 *{c:,}* ({pct}%)\n"
+        msg = msg[:-1]  # Remove last \n
+        msg = msg.rsplit("\u251C", 1)
+        msg = "\u2514".join(msg)  # Replace last ├ with └
+        msg += "\n"
+
+    idf = get_leads_count("IDF")
+    hors = get_leads_count("HORS_IDF")
+    msg += (
+        f"\n\U0001F4CD *Par r\u00e9gion :*\n"
+        f"\u251C \U0001F3D9 IDF \u2500 *{idf:,}*\n"
+        f"\u2514 \U0001F30D Hors IDF \u2500 *{hors:,}*\n"
+    )
+
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
