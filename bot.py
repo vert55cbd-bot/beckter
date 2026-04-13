@@ -15,6 +15,7 @@ from telegram.ext import (
 from database import (
     init_db, search_by_phone, insert_client, get_client_count,
     clear_db, normalize_phone, get_leads, get_leads_count,
+    get_available_banques,
 )
 
 # Logging
@@ -103,25 +104,34 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show region selection for lead generation."""
-    idf_count = get_leads_count("IDF")
-    hors_count = get_leads_count("HORS_IDF")
-    total = get_client_count()
+BANQUE_ICONS = {"SG": "\U0001F534", "CIC": "\U0001F535", "BNP": "\U0001F7E2", "LCL": "\U0001F7E1", "CA": "\U0001F7E0"}
 
-    keyboard = [
-        [
-            InlineKeyboardButton(f"\U0001F3D9 IDF ({idf_count})", callback_data="gen_region_IDF"),
-            InlineKeyboardButton(f"\U0001F30D Hors IDF ({hors_count})", callback_data="gen_region_HORS_IDF"),
-        ],
-        [
-            InlineKeyboardButton(f"\U0001F1EB\U0001F1F7 Tous ({total})", callback_data="gen_region_ALL"),
-        ],
-    ]
+
+async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show bank selection for lead generation."""
+    banques = get_available_banques()
+
+    if not banques:
+        await update.message.reply_text("\u274C Aucune banque en base.", parse_mode="Markdown")
+        return
+
+    keyboard = []
+    row = []
+    for banque, cnt in banques:
+        icon = BANQUE_ICONS.get(banque, "\U0001F3E6")
+        row.append(InlineKeyboardButton(f"{icon} {banque} ({cnt})", callback_data=f"gen_banque_{banque}"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    total = get_client_count()
+    keyboard.append([InlineKeyboardButton(f"\U0001F4CA Toutes ({total})", callback_data="gen_banque_ALL")])
 
     await update.message.reply_text(
         "\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
-        "\U0001F50D S\u00e9lectionnez la r\u00e9gion :",
+        "\U0001F3E6 S\u00e9lectionnez la banque :",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",
     )
@@ -133,15 +143,45 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     data = query.data
 
-    # Step 1: Region selected -> show name filter
-    if data.startswith("gen_region_"):
+    # Step 1: Bank selected -> show region
+    if data.startswith("gen_banque_"):
+        banque = data.replace("gen_banque_", "")
+        context.user_data["gen_banque"] = banque
+        banque_label = banque if banque != "ALL" else "Toutes"
+
+        idf_count = get_leads_count("IDF", "ALL", banque)
+        hors_count = get_leads_count("HORS_IDF", "ALL", banque)
+        all_count = get_leads_count("ALL", "ALL", banque)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(f"\U0001F3D9 IDF ({idf_count})", callback_data="gen_region_IDF"),
+                InlineKeyboardButton(f"\U0001F30D Hors IDF ({hors_count})", callback_data="gen_region_HORS_IDF"),
+            ],
+            [
+                InlineKeyboardButton(f"\U0001F1EB\U0001F1F7 Tous ({all_count})", callback_data="gen_region_ALL"),
+            ],
+        ]
+
+        await query.edit_message_text(
+            f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            f"\U0001F3E6 Banque : *{banque_label}*\n\n"
+            f"\U0001F4CD S\u00e9lectionnez la r\u00e9gion :",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    # Step 2: Region selected -> show name filter
+    elif data.startswith("gen_region_"):
         region = data.replace("gen_region_", "")
         context.user_data["gen_region"] = region
+        banque = context.user_data.get("gen_banque", "ALL")
+        banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
 
-        arabe_count = get_leads_count(region, "ARABE")
-        francais_count = get_leads_count(region, "FRANCAIS")
-        all_count = get_leads_count(region, "ALL")
+        arabe_count = get_leads_count(region, "ARABE", banque)
+        francais_count = get_leads_count(region, "FRANCAIS", banque)
+        all_count = get_leads_count(region, "ALL", banque)
 
         keyboard = [
             [
@@ -155,20 +195,23 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
 
         await query.edit_message_text(
             f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            f"\U0001F3E6 Banque : *{banque_label}*\n"
             f"\U0001F4CD R\u00e9gion : *{region_label}*\n\n"
             f"\U0001F464 Filtrer par type de nom :",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
 
-    # Step 2: Name filter selected -> show batch size
+    # Step 3: Name filter selected -> show batch size
     elif data.startswith("gen_name_"):
         name_type = data.replace("gen_name_", "")
         context.user_data["gen_name"] = name_type
+        banque = context.user_data.get("gen_banque", "ALL")
         region = context.user_data.get("gen_region", "ALL")
+        banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
         name_label = NAME_LABELS.get(name_type, name_type)
-        count = get_leads_count(region, name_type)
+        count = get_leads_count(region, name_type, banque)
 
         keyboard = [
             [
@@ -180,6 +223,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
 
         await query.edit_message_text(
             f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            f"\U0001F3E6 Banque : *{banque_label}*\n"
             f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
             f"\U0001F464 Noms : *{name_label}* ({count} dispo)\n\n"
             f"\U0001F522 Combien de leads ?",
@@ -187,21 +231,23 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             parse_mode="Markdown",
         )
 
-    # Step 3: Batch size selected -> generate & send file
+    # Step 4: Batch size selected -> generate & send file
     elif data.startswith("gen_batch_"):
         batch_size = int(data.replace("gen_batch_", ""))
+        banque = context.user_data.get("gen_banque", "ALL")
         region = context.user_data.get("gen_region", "ALL")
         name_type = context.user_data.get("gen_name", "ALL")
+        banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
         name_label = NAME_LABELS.get(name_type, name_type)
 
         await query.edit_message_text(
             f"\u23F3 G\u00e9n\u00e9ration de *{batch_size}* leads...\n"
-            f"\U0001F4CD {region_label} | \U0001F464 {name_label}",
+            f"\U0001F3E6 {banque_label} | \U0001F4CD {region_label} | \U0001F464 {name_label}",
             parse_mode="Markdown",
         )
 
-        leads = get_leads(region, batch_size, name_type)
+        leads = get_leads(region, batch_size, name_type, banque)
 
         if not leads:
             await query.edit_message_text(
@@ -213,7 +259,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         # Build export file
         lines = [
             f"{'='*50}",
-            f"  LEADS SG - {region_label} - {name_label}",
+            f"  LEADS {banque_label} - {region_label} - {name_label}",
             f"  {len(leads)} fiches",
             f"{'='*50}\n",
         ]
@@ -241,19 +287,20 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
 
         content = "\n".join(lines)
         file_buf = io.BytesIO(content.encode("utf-8"))
+        banque_tag = banque.lower()
         region_tag = region.lower().replace("_", "-")
         name_tag = name_type.lower()
-        file_buf.name = f"leads-sg-{region_tag}-{name_tag}-{len(leads)}.txt"
+        file_buf.name = f"leads-{banque_tag}-{region_tag}-{name_tag}-{len(leads)}.txt"
 
         await query.edit_message_text(
             f"\u2705 *{len(leads)}* leads g\u00e9n\u00e9r\u00e9s\n"
-            f"\U0001F4CD {region_label} | \U0001F464 {name_label}",
+            f"\U0001F3E6 {banque_label} | \U0001F4CD {region_label} | \U0001F464 {name_label}",
             parse_mode="Markdown",
         )
         await query.message.reply_document(
             document=file_buf,
             filename=file_buf.name,
-            caption=f"\U0001F4C4 {len(leads)} leads SG \u2014 {region_label} \u2014 {name_label}",
+            caption=f"\U0001F4C4 {len(leads)} leads {banque_label} \u2014 {region_label} \u2014 {name_label}",
         )
 
 

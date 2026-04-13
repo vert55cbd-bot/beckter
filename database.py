@@ -25,10 +25,18 @@ def init_db():
             code_postal TEXT,
             ville TEXT,
             iban TEXT,
-            bic TEXT
+            bic TEXT,
+            banque TEXT DEFAULT ''
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_telephone ON clients(telephone)")
+    # Migration: add banque column if missing
+    try:
+        conn.execute("ALTER TABLE clients ADD COLUMN banque TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_banque ON clients(banque)")
     conn.commit()
     conn.close()
 
@@ -57,8 +65,8 @@ def search_by_phone(phone: str):
 def insert_client(data: dict):
     conn = get_connection()
     conn.execute("""
-        INSERT INTO clients (nom, prenom, date_naissance, age, email, telephone, adresse, code_postal, ville, iban, bic)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO clients (nom, prenom, date_naissance, age, email, telephone, adresse, code_postal, ville, iban, bic, banque)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data.get("nom", ""),
         data.get("prenom", ""),
@@ -71,7 +79,26 @@ def insert_client(data: dict):
         data.get("ville", ""),
         data.get("iban", ""),
         data.get("bic", ""),
+        data.get("banque", ""),
     ))
+    conn.commit()
+    conn.close()
+
+
+def bulk_insert_clients(clients: list):
+    """Insert many clients in a single transaction for performance."""
+    conn = get_connection()
+    conn.executemany("""
+        INSERT INTO clients (nom, prenom, date_naissance, age, email, telephone, adresse, code_postal, ville, iban, bic, banque)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, [
+        (
+            c.get("nom", ""), c.get("prenom", ""), c.get("date_naissance", ""),
+            c.get("age", 0), c.get("email", ""), normalize_phone(c.get("telephone", "")),
+            c.get("adresse", ""), c.get("code_postal", ""), c.get("ville", ""),
+            c.get("iban", ""), c.get("bic", ""), c.get("banque", ""),
+        ) for c in clients
+    ])
     conn.commit()
     conn.close()
 
@@ -146,18 +173,36 @@ def _name_filter(name_type: str) -> str:
     return "1=1"
 
 
-def get_leads_count(region: str = "ALL", name_type: str = "ALL") -> int:
+def _banque_filter(banque: str) -> str:
+    """Return SQL WHERE clause for bank filtering."""
+    if banque and banque != "ALL":
+        return f"banque = '{banque}'"
+    return "1=1"
+
+
+def get_available_banques() -> list:
+    """Return list of (banque, count) tuples for all banks in DB."""
     conn = get_connection()
-    where = f"{_region_filter(region)} AND {_name_filter(name_type)}"
+    cursor = conn.execute(
+        "SELECT banque, COUNT(*) as cnt FROM clients WHERE banque != '' GROUP BY banque ORDER BY cnt DESC"
+    )
+    results = [(row["banque"], row["cnt"]) for row in cursor.fetchall()]
+    conn.close()
+    return results
+
+
+def get_leads_count(region: str = "ALL", name_type: str = "ALL", banque: str = "ALL") -> int:
+    conn = get_connection()
+    where = f"{_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
     cursor = conn.execute(f"SELECT COUNT(*) FROM clients WHERE {where}")
     count = cursor.fetchone()[0]
     conn.close()
     return count
 
 
-def get_leads(region: str = "ALL", batch_size: int = 100, name_type: str = "ALL") -> list:
+def get_leads(region: str = "ALL", batch_size: int = 100, name_type: str = "ALL", banque: str = "ALL") -> list:
     conn = get_connection()
-    where = f"{_region_filter(region)} AND {_name_filter(name_type)}"
+    where = f"{_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
     cursor = conn.execute(
         f"SELECT * FROM clients WHERE {where} ORDER BY nom, prenom LIMIT ?",
         (batch_size,)
