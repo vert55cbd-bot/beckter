@@ -192,6 +192,22 @@ def classify_name(nom: str, prenom: str) -> str:
     return "FRANCAIS"
 
 
+AGE_TRANCHES = {
+    "1930-1960": ("1930", "1960"),
+    "1960-1980": ("1960", "1980"),
+    "1980-2000": ("1980", "2000"),
+    "2000+": ("2000", "2026"),
+}
+
+
+def _age_filter(tranche: str) -> str:
+    """Return SQL WHERE clause for birth year filtering (DD/MM/YYYY format)."""
+    if tranche and tranche != "ALL" and tranche in AGE_TRANCHES:
+        year_min, year_max = AGE_TRANCHES[tranche]
+        return f"(SUBSTR(date_naissance, 7, 4) >= '{year_min}' AND SUBSTR(date_naissance, 7, 4) <= '{year_max}' AND date_naissance != '')"
+    return "1=1"
+
+
 def _banque_filter(banque: str) -> str:
     """Return SQL WHERE clause for bank filtering."""
     if banque and banque != "ALL":
@@ -210,18 +226,18 @@ def get_available_banques() -> list:
     return results
 
 
-def get_leads_count(region: str = "ALL", name_type: str = "ALL", banque: str = "ALL") -> int:
+def get_leads_count(region: str = "ALL", name_type: str = "ALL", banque: str = "ALL", tranche: str = "ALL") -> int:
     conn = get_connection()
-    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
+    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)} AND {_age_filter(tranche)}"
     cursor = conn.execute(f"SELECT COUNT(*) FROM clients WHERE {where}")
     count = cursor.fetchone()[0]
     conn.close()
     return count
 
 
-def get_leads(region: str = "ALL", batch_size: int = 100, name_type: str = "ALL", banque: str = "ALL") -> list:
+def get_leads(region: str = "ALL", batch_size: int = 100, name_type: str = "ALL", banque: str = "ALL", tranche: str = "ALL") -> list:
     conn = get_connection()
-    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)}"
+    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_name_filter(name_type)} AND {_age_filter(tranche)}"
     cursor = conn.execute(
         f"SELECT * FROM clients WHERE {where} ORDER BY RANDOM() LIMIT ?",
         (batch_size,)

@@ -86,6 +86,7 @@ def format_client(client) -> str:
 
 REGION_LABELS = {"IDF": "Ile-de-France", "HORS_IDF": "Hors IDF", "ALL": "Toute la France"}
 NAME_LABELS = {"ARABE": "Noms arabes", "FRANCAIS": "Noms fran\u00e7ais", "ALL": "Tous"}
+TRANCHE_LABELS = {"1930-1960": "1930-1960", "1960-1980": "1960-1980", "1980-2000": "1980-2000", "2000+": "2000+", "ALL": "Toutes"}
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -338,7 +339,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             parse_mode="Markdown",
         )
 
-    # Step 3: Name filter selected -> show batch size
+    # Step 3: Name filter selected -> show age tranche
     elif data.startswith("gen_name_"):
         name_type = data.replace("gen_name_", "")
         context.user_data["gen_name"] = name_type
@@ -347,6 +348,42 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
         name_label = NAME_LABELS.get(name_type, name_type)
+
+        keyboard = [
+            [
+                InlineKeyboardButton("\U0001F9D3 1930-1960", callback_data="gen_age_1930-1960"),
+                InlineKeyboardButton("\U0001F468 1960-1980", callback_data="gen_age_1960-1980"),
+            ],
+            [
+                InlineKeyboardButton("\U0001F9D1 1980-2000", callback_data="gen_age_1980-2000"),
+                InlineKeyboardButton("\U0001F466 2000+", callback_data="gen_age_2000+"),
+            ],
+            [
+                InlineKeyboardButton("\U0001F465 Toutes", callback_data="gen_age_ALL"),
+            ],
+        ]
+
+        await query.edit_message_text(
+            f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            f"\U0001F3E6 Banque : *{banque_label}*\n"
+            f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
+            f"\U0001F464 Noms : *{name_label}*\n\n"
+            f"\U0001F4C5 Tranche d'\u00e2ge (ann\u00e9e de naissance) :",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    # Step 4: Age tranche selected -> show batch size
+    elif data.startswith("gen_age_"):
+        tranche = data.replace("gen_age_", "")
+        context.user_data["gen_tranche"] = tranche
+        banque = context.user_data.get("gen_banque", "ALL")
+        region = context.user_data.get("gen_region", "ALL")
+        name_type = context.user_data.get("gen_name", "ALL")
+        banque_label = banque if banque != "ALL" else "Toutes"
+        region_label = REGION_LABELS.get(region, region)
+        name_label = NAME_LABELS.get(name_type, name_type)
+        tranche_label = TRANCHE_LABELS.get(tranche, tranche)
 
         keyboard = [
             [
@@ -360,29 +397,32 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
             f"\U0001F3E6 Banque : *{banque_label}*\n"
             f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
-            f"\U0001F464 Noms : *{name_label}*\n\n"
+            f"\U0001F464 Noms : *{name_label}*\n"
+            f"\U0001F4C5 \u00c2ge : *{tranche_label}*\n\n"
             f"\U0001F522 Combien de leads ?",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
 
-    # Step 4: Batch size selected -> generate & send file
+    # Step 5: Batch size selected -> generate & send file
     elif data.startswith("gen_batch_"):
         batch_size = int(data.replace("gen_batch_", ""))
         banque = context.user_data.get("gen_banque", "ALL")
         region = context.user_data.get("gen_region", "ALL")
         name_type = context.user_data.get("gen_name", "ALL")
+        tranche = context.user_data.get("gen_tranche", "ALL")
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
         name_label = NAME_LABELS.get(name_type, name_type)
+        tranche_label = TRANCHE_LABELS.get(tranche, tranche)
 
         await query.edit_message_text(
             f"\u23F3 G\u00e9n\u00e9ration de *{batch_size}* leads...\n"
-            f"\U0001F3E6 {banque_label} | \U0001F4CD {region_label} | \U0001F464 {name_label}",
+            f"\U0001F3E6 {banque_label} | \U0001F4CD {region_label} | \U0001F464 {name_label} | \U0001F4C5 {tranche_label}",
             parse_mode="Markdown",
         )
 
-        leads = get_leads(region, batch_size, name_type, banque)
+        leads = get_leads(region, batch_size, name_type, banque, tranche)
 
         if not leads:
             await query.edit_message_text(
@@ -394,7 +434,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         # Build export file
         lines = [
             f"{'='*50}",
-            f"  LEADS {banque_label} - {region_label} - {name_label}",
+            f"  LEADS {banque_label} - {region_label} - {name_label} - {tranche_label}",
             f"  {len(leads)} fiches",
             f"{'='*50}\n",
         ]
