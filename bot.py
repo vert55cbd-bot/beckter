@@ -312,13 +312,46 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             parse_mode="Markdown",
         )
 
-    # Step 2: Region selected -> show name filter (no counts - too slow with LIKE)
+    # Step 2: Region selected -> show department filter
     elif data.startswith("gen_region_"):
         region = data.replace("gen_region_", "")
         context.user_data["gen_region"] = region
         banque = context.user_data.get("gen_banque", "ALL")
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
+
+        keyboard = [
+            [
+                InlineKeyboardButton("\U0001F4CD 34 - H\u00e9rault", callback_data="gen_dept_34"),
+                InlineKeyboardButton("\U0001F4CD 74 - Hte-Savoie", callback_data="gen_dept_74"),
+            ],
+            [
+                InlineKeyboardButton("\U0001F4CD 84 - Vaucluse", callback_data="gen_dept_84"),
+                InlineKeyboardButton("\U0001F4CD 34,74,84", callback_data="gen_dept_34,74,84"),
+            ],
+            [
+                InlineKeyboardButton("\U0001F30D Tous d\u00e9partements", callback_data="gen_dept_ALL"),
+            ],
+        ]
+
+        await query.edit_message_text(
+            f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            f"\U0001F3E6 Banque : *{banque_label}*\n"
+            f"\U0001F4CD R\u00e9gion : *{region_label}*\n\n"
+            f"\U0001F4EC Filtrer par d\u00e9partement :",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    # Step 2b: Department selected -> show name filter
+    elif data.startswith("gen_dept_"):
+        depts = data.replace("gen_dept_", "")
+        context.user_data["gen_depts"] = depts
+        banque = context.user_data.get("gen_banque", "ALL")
+        region = context.user_data.get("gen_region", "ALL")
+        banque_label = banque if banque != "ALL" else "Toutes"
+        region_label = REGION_LABELS.get(region, region)
+        dept_label = depts if depts != "ALL" else "Tous"
 
         keyboard = [
             [
@@ -333,7 +366,8 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text(
             f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
             f"\U0001F3E6 Banque : *{banque_label}*\n"
-            f"\U0001F4CD R\u00e9gion : *{region_label}*\n\n"
+            f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
+            f"\U0001F4EC D\u00e9pt : *{dept_label}*\n\n"
             f"\U0001F464 Filtrer par type de nom :",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
@@ -345,8 +379,10 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         context.user_data["gen_name"] = name_type
         banque = context.user_data.get("gen_banque", "ALL")
         region = context.user_data.get("gen_region", "ALL")
+        depts = context.user_data.get("gen_depts", "ALL")
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
+        dept_label = depts if depts != "ALL" else "Tous"
         name_label = NAME_LABELS.get(name_type, name_type)
 
         keyboard = [
@@ -367,6 +403,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
             f"\U0001F3E6 Banque : *{banque_label}*\n"
             f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
+            f"\U0001F4EC D\u00e9pt : *{dept_label}*\n"
             f"\U0001F464 Noms : *{name_label}*\n\n"
             f"\U0001F4C5 Tranche d'\u00e2ge (ann\u00e9e de naissance) :",
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -379,9 +416,11 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         context.user_data["gen_tranche"] = tranche
         banque = context.user_data.get("gen_banque", "ALL")
         region = context.user_data.get("gen_region", "ALL")
+        depts = context.user_data.get("gen_depts", "ALL")
         name_type = context.user_data.get("gen_name", "ALL")
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
+        dept_label = depts if depts != "ALL" else "Tous"
         name_label = NAME_LABELS.get(name_type, name_type)
         tranche_label = TRANCHE_LABELS.get(tranche, tranche)
 
@@ -397,6 +436,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
             f"\U0001F3E6 Banque : *{banque_label}*\n"
             f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
+            f"\U0001F4EC D\u00e9pt : *{dept_label}*\n"
             f"\U0001F464 Noms : *{name_label}*\n"
             f"\U0001F4C5 \u00c2ge : *{tranche_label}*\n\n"
             f"\U0001F522 Combien de leads ?",
@@ -409,20 +449,22 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         batch_size = int(data.replace("gen_batch_", ""))
         banque = context.user_data.get("gen_banque", "ALL")
         region = context.user_data.get("gen_region", "ALL")
+        depts = context.user_data.get("gen_depts", "ALL")
         name_type = context.user_data.get("gen_name", "ALL")
         tranche = context.user_data.get("gen_tranche", "ALL")
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
+        dept_label = depts if depts != "ALL" else "Tous"
         name_label = NAME_LABELS.get(name_type, name_type)
         tranche_label = TRANCHE_LABELS.get(tranche, tranche)
 
         await query.edit_message_text(
             f"\u23F3 G\u00e9n\u00e9ration de *{batch_size}* leads...\n"
-            f"\U0001F3E6 {banque_label} | \U0001F4CD {region_label} | \U0001F464 {name_label} | \U0001F4C5 {tranche_label}",
+            f"\U0001F3E6 {banque_label} | \U0001F4CD {region_label} | \U0001F4EC {dept_label} | \U0001F464 {name_label} | \U0001F4C5 {tranche_label}",
             parse_mode="Markdown",
         )
 
-        leads = get_leads(region, batch_size, name_type, banque, tranche)
+        leads = get_leads(region, batch_size, name_type, banque, tranche, depts)
 
         if not leads:
             await query.edit_message_text(
@@ -434,7 +476,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         # Build export file
         lines = [
             f"{'='*50}",
-            f"  LEADS {banque_label} - {region_label} - {name_label} - {tranche_label}",
+            f"  LEADS {banque_label} - {region_label} - Dept {dept_label} - {name_label} - {tranche_label}",
             f"  {len(leads)} fiches",
             f"{'='*50}\n",
         ]
