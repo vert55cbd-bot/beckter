@@ -103,14 +103,14 @@ def bulk_insert_clients(clients: list):
     """Insert many clients in a single transaction for performance."""
     conn = get_connection()
     conn.executemany("""
-        INSERT INTO clients (nom, prenom, date_naissance, age, email, telephone, adresse, code_postal, ville, iban, bic, banque)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO clients (nom, prenom, date_naissance, age, email, telephone, adresse, code_postal, ville, iban, bic, banque, name_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, [
         (
             c.get("nom", ""), c.get("prenom", ""), c.get("date_naissance", ""),
             c.get("age", 0), c.get("email", ""), normalize_phone(c.get("telephone", "")),
             c.get("adresse", ""), c.get("code_postal", ""), c.get("ville", ""),
-            c.get("iban", ""), c.get("bic", ""), c.get("banque", ""),
+            c.get("iban", ""), c.get("bic", ""), c.get("banque", ""), c.get("name_type", ""),
         ) for c in clients
     ])
     conn.commit()
@@ -232,6 +232,18 @@ def get_available_banques() -> list:
         "SELECT banque, COUNT(*) as cnt FROM clients WHERE banque != '' GROUP BY banque ORDER BY cnt DESC"
     )
     results = [(row["banque"], row["cnt"]) for row in cursor.fetchall()]
+    conn.close()
+    return results
+
+
+def get_banques_with_stock() -> list:
+    """Return list of (banque, total, dispo) tuples."""
+    conn = get_connection()
+    cursor = conn.execute(
+        "SELECT banque, COUNT(*) as total, SUM(CASE WHEN used = 0 THEN 1 ELSE 0 END) as dispo "
+        "FROM clients WHERE banque != '' GROUP BY banque ORDER BY total DESC"
+    )
+    results = [(row["banque"], row["total"], row["dispo"]) for row in cursor.fetchall()]
     conn.close()
     return results
 

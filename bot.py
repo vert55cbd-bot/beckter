@@ -15,7 +15,7 @@ from telegram.ext import (
 from database import (
     init_db, search_by_phone, insert_client, get_client_count,
     clear_db, normalize_phone, get_leads, get_leads_count,
-    get_available_banques, get_used_count, reset_used,
+    get_available_banques, get_used_count, reset_used, get_banques_with_stock,
 )
 
 # Logging
@@ -207,7 +207,7 @@ async def handle_start_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(msg, parse_mode="Markdown")
 
     elif data == "start_banques":
-        banques = get_available_banques()
+        banques = get_banques_with_stock()
         if not banques:
             await query.edit_message_text("\u274C Aucune banque en base.", parse_mode="Markdown")
             return
@@ -217,13 +217,11 @@ async def handle_start_callback(update: Update, context: ContextTypes.DEFAULT_TY
             f"        \U0001F3E6  *BANQUES*\n\n"
             f"\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022\n\n"
         )
-        for b, c in banques:
+        for b, total, dispo in banques:
             icon = BANQUE_ICONS.get(b, "\U0001F3E6")
-            idf_c = get_leads_count("IDF", "ALL", b)
-            hors_c = get_leads_count("HORS_IDF", "ALL", b)
             msg += (
-                f"{icon}  *{b}* \u2014 `{c:,}` fiches\n"
-                f"      \U0001F3D9 IDF `{idf_c:,}` | \U0001F30D Hors `{hors_c:,}`\n\n"
+                f"{icon}  *{b}*\n"
+                f"      \U0001F4BE `{total:,}` total  |  \U0001F7E2 `{dispo:,}` dispo\n\n"
             )
         await query.edit_message_text(msg, parse_mode="Markdown")
 
