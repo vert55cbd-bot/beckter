@@ -163,9 +163,15 @@ async def handle_start_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await query.edit_message_text("\u274C Aucune banque en base.", parse_mode="Markdown")
             return
 
+        # Filtrer : que les banques principales (>= 1000 fiches) et exclure codes BIC
+        main_banques = [
+            (b, c) for b, c in banques
+            if c >= 1000 and not (len(b) == 11 and b.isupper() and b[-3:] == "XXX")
+        ]
+
         keyboard = []
         row = []
-        for banque, cnt in banques:
+        for banque, cnt in main_banques:
             icon = BANQUE_ICONS.get(banque, "\U0001F3E6")
             row.append(InlineKeyboardButton(f"{icon} {banque} ({cnt:,})", callback_data=f"gen_banque_{banque}"))
             if len(row) == 2:
@@ -243,7 +249,16 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-BANQUE_ICONS = {"SG": "\U0001F534", "CIC": "\U0001F535", "BNP": "\U0001F7E2", "LCL": "\U0001F7E1", "CA": "\U0001F7E0"}
+BANQUE_ICONS = {
+    "SG": "\U0001F534", "CIC": "\U0001F535", "BNP": "\U0001F7E2",
+    "LCL": "\U0001F7E1", "CA": "\U0001F7E0", "CM": "\U0001F535",
+    "Caisse Epargne": "\U0001F7E3", "BP": "\U0001F535",
+    "Banque Populaire": "\U0001F535", "BOURSO": "\u26AB",
+    "FORTUNEO": "\U0001F7E2", "BRED": "\U0001F534",
+    "Revolut": "\u26AB", "HSBC": "\U0001F534", "AXA": "\U0001F535",
+    "N26": "\u26AB", "Lydia": "\U0001F7E3", "Qonto": "\u26AB",
+    "ING": "\U0001F7E0", "Bunq": "\U0001F7E2",
+}
 
 
 async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -254,11 +269,17 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\u274C Aucune banque en base.", parse_mode="Markdown")
         return
 
+    # Filtrer : que les banques principales (>= 1000 fiches) et exclure codes BIC
+    main_banques = [
+        (b, c) for b, c in banques
+        if c >= 1000 and not (len(b) == 11 and b.isupper() and b[-3:] == "XXX")
+    ]
+
     keyboard = []
     row = []
-    for banque, cnt in banques:
+    for banque, cnt in main_banques:
         icon = BANQUE_ICONS.get(banque, "\U0001F3E6")
-        row.append(InlineKeyboardButton(f"{icon} {banque} ({cnt})", callback_data=f"gen_banque_{banque}"))
+        row.append(InlineKeyboardButton(f"{icon} {banque} ({cnt:,})", callback_data=f"gen_banque_{banque}"))
         if len(row) == 2:
             keyboard.append(row)
             row = []
@@ -266,7 +287,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append(row)
 
     total = get_client_count()
-    keyboard.append([InlineKeyboardButton(f"\U0001F4CA Toutes ({total})", callback_data="gen_banque_ALL")])
+    keyboard.append([InlineKeyboardButton(f"\U0001F4CA Toutes ({total:,})", callback_data="gen_banque_ALL")])
 
     await update.message.reply_text(
         "\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
