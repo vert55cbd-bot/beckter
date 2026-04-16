@@ -346,7 +346,14 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             ],
             [
                 InlineKeyboardButton("\U0001F4CD 84 - Vaucluse", callback_data="gen_dept_84"),
+                InlineKeyboardButton("\U0001F4CD 13 - B-du-Rh\u00f4ne", callback_data="gen_dept_13"),
+            ],
+            [
+                InlineKeyboardButton("\U0001F4CD 13012 - Marseille 12e", callback_data="gen_dept_13012"),
+            ],
+            [
                 InlineKeyboardButton("\U0001F4CD 34,74,84", callback_data="gen_dept_34,74,84"),
+                InlineKeyboardButton("\U0001F4CD 13,13012", callback_data="gen_dept_13,13012"),
             ],
             [
                 InlineKeyboardButton("\U0001F30D Tous d\u00e9partements", callback_data="gen_dept_ALL"),

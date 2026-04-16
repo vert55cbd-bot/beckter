@@ -209,11 +209,19 @@ def _age_filter(tranche: str) -> str:
 
 
 def _dept_filter(depts: str) -> str:
-    """Return SQL WHERE clause for department filtering. depts is comma-separated like '34,74,84'."""
+    """Return SQL WHERE clause for department/postal code filtering.
+    depts is comma-separated like '34,74,84' or '13012,13'.
+    2 chars = department prefix (LIKE), 5 chars = exact postal code."""
     if depts and depts != "ALL":
         dept_list = [d.strip() for d in depts.split(",") if d.strip()]
         if dept_list:
-            clauses = " OR ".join(f"code_postal LIKE '{d}%'" for d in dept_list)
+            parts = []
+            for d in dept_list:
+                if len(d) == 5:
+                    parts.append(f"code_postal = '{d}'")
+                else:
+                    parts.append(f"code_postal LIKE '{d}%'")
+            clauses = " OR ".join(parts)
             return f"({clauses})"
     return "1=1"
 
