@@ -1,1 +1,1 @@
-worker: python bot.py
+worker: echo "Bot disabled on Render" && sleep infinity
