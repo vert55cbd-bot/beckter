@@ -436,7 +436,7 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             parse_mode="Markdown",
         )
 
-    # Step 4: Age tranche selected -> show batch size
+    # Step 4: Age tranche selected -> show gender filter
     elif data.startswith("gen_age_"):
         tranche = data.replace("gen_age_", "")
         context.user_data["gen_tranche"] = tranche
@@ -452,6 +452,44 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
 
         keyboard = [
             [
+                InlineKeyboardButton("\U0001F468 Homme", callback_data="gen_gender_HOMME"),
+                InlineKeyboardButton("\U0001F469 Femme", callback_data="gen_gender_FEMME"),
+            ],
+            [
+                InlineKeyboardButton("\U0001F465 Mixte", callback_data="gen_gender_ALL"),
+            ],
+        ]
+
+        await query.edit_message_text(
+            f"\U0001F4E6 *G\u00e9n\u00e9rateur de Leads*\n\n"
+            f"\U0001F3E6 Banque : *{banque_label}*\n"
+            f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
+            f"\U0001F4EC D\u00e9pt : *{dept_label}*\n"
+            f"\U0001F464 Noms : *{name_label}*\n"
+            f"\U0001F4C5 \u00c2ge : *{tranche_label}*\n\n"
+            f"\U0001F6BB Genre :",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+        )
+
+    # Step 5: Gender selected -> show batch size
+    elif data.startswith("gen_gender_"):
+        gender = data.replace("gen_gender_", "")
+        context.user_data["gen_gender"] = gender
+        banque = context.user_data.get("gen_banque", "ALL")
+        region = context.user_data.get("gen_region", "ALL")
+        depts = context.user_data.get("gen_depts", "ALL")
+        name_type = context.user_data.get("gen_name", "ALL")
+        tranche = context.user_data.get("gen_tranche", "ALL")
+        banque_label = banque if banque != "ALL" else "Toutes"
+        region_label = REGION_LABELS.get(region, region)
+        dept_label = depts if depts != "ALL" else "Tous"
+        name_label = NAME_LABELS.get(name_type, name_type)
+        tranche_label = TRANCHE_LABELS.get(tranche, tranche)
+        gender_label = {"HOMME": "Homme", "FEMME": "Femme", "ALL": "Mixte"}.get(gender, gender)
+
+        keyboard = [
+            [
                 InlineKeyboardButton("100", callback_data="gen_batch_100"),
                 InlineKeyboardButton("500", callback_data="gen_batch_500"),
                 InlineKeyboardButton("1000", callback_data="gen_batch_1000"),
@@ -464,13 +502,14 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
             f"\U0001F4CD R\u00e9gion : *{region_label}*\n"
             f"\U0001F4EC D\u00e9pt : *{dept_label}*\n"
             f"\U0001F464 Noms : *{name_label}*\n"
-            f"\U0001F4C5 \u00c2ge : *{tranche_label}*\n\n"
+            f"\U0001F4C5 \u00c2ge : *{tranche_label}*\n"
+            f"\U0001F6BB Genre : *{gender_label}*\n\n"
             f"\U0001F522 Combien de leads ?",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown",
         )
 
-    # Step 5: Batch size selected -> generate & send file
+    # Step 6: Batch size selected -> generate & send file
     elif data.startswith("gen_batch_"):
         batch_size = int(data.replace("gen_batch_", ""))
         banque = context.user_data.get("gen_banque", "ALL")
@@ -478,19 +517,21 @@ async def handle_generate_callback(update: Update, context: ContextTypes.DEFAULT
         depts = context.user_data.get("gen_depts", "ALL")
         name_type = context.user_data.get("gen_name", "ALL")
         tranche = context.user_data.get("gen_tranche", "ALL")
+        gender = context.user_data.get("gen_gender", "ALL")
         banque_label = banque if banque != "ALL" else "Toutes"
         region_label = REGION_LABELS.get(region, region)
         dept_label = depts if depts != "ALL" else "Tous"
         name_label = NAME_LABELS.get(name_type, name_type)
         tranche_label = TRANCHE_LABELS.get(tranche, tranche)
+        gender_label = {"HOMME": "Homme", "FEMME": "Femme", "ALL": "Mixte"}.get(gender, gender)
 
         await query.edit_message_text(
             f"\u23F3 G\u00e9n\u00e9ration de *{batch_size}* leads...\n"
-            f"\U0001F3E6 {banque_label} | \U0001F4CD {region_label} | \U0001F4EC {dept_label} | \U0001F464 {name_label} | \U0001F4C5 {tranche_label}",
+            f"\U0001F3E6 {banque_label} | \U0001F4CD {region_label} | \U0001F4EC {dept_label} | \U0001F464 {name_label} | \U0001F4C5 {tranche_label} | \U0001F6BB {gender_label}",
             parse_mode="Markdown",
         )
 
-        leads = get_leads(region, batch_size, name_type, banque, tranche, depts)
+        leads = get_leads(region, batch_size, name_type, banque, tranche, depts, gender)
 
         if not leads:
             await query.edit_message_text(

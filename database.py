@@ -200,6 +200,46 @@ AGE_TRANCHES = {
 }
 
 
+FEMALE_ENDINGS = ("A", "E", "INE", "ETTE", "ELLE", "AINE", "IE", "ILLE", "ENNE", "IANE", "ANDE", "RINE", "LINE", "DINE", "TINE", "NINE", "SINE", "LISE", "MISE", "NISE", "RISE", "OISE", "ISE", "OSE", "ASE", "USE", "OUSE", "EUSE", "AISE", "AISE")
+FEMALE_PRENOMS = (
+    "MARIE", "ANNE", "NATHALIE", "SYLVIE", "ISABELLE", "CATHERINE", "CHRISTINE",
+    "MONIQUE", "NICOLE", "FRANCOISE", "BRIGITTE", "DOMINIQUE", "VALERIE",
+    "CORINNE", "PATRICIA", "MARTINE", "VERONIQUE", "SANDRINE", "LAURENCE",
+    "FATIMA", "KHADIJA", "AMINA", "NAIMA", "RACHIDA", "MALIKA", "AICHA",
+    "SAMIRA", "LEILA", "NADIA", "KARIMA", "FARIDA", "SAIDA", "ZOHRA",
+    "SARAH", "LAURA", "EMMA", "LEA", "CHLOE", "CAMILLE", "MANON", "JULIE",
+    "CHARLOTTE", "MARGAUX", "PAULINE", "OCEANE", "MARINE", "CLEMENCE",
+    "FATOU", "AMINATA", "MARIAMA", "AWA", "BINTA", "FATOUMATA", "HAWA",
+    "AGNES", "MIREILLE", "MARGUERITE", "GERMAINE", "SIMONE", "JEANNE",
+    "HELENE", "DENISE", "RENEE", "YVETTE", "ODETTE", "SUZANNE", "THERESE",
+    "COLETTE", "JACQUELINE", "MADELEINE", "GENEVIEVE", "LUCIENNE",
+)
+MALE_PRENOMS = (
+    "JEAN", "PIERRE", "MICHEL", "CLAUDE", "JACQUES", "ALAIN", "ANDRE",
+    "PHILIPPE", "CHRISTIAN", "BERNARD", "PATRICK", "DANIEL", "ERIC",
+    "THIERRY", "PASCAL", "LAURENT", "DIDIER", "CHRISTOPHE", "NICOLAS",
+    "STEPHANE", "FREDERIC", "OLIVIER", "DAVID", "FRANCK", "JEROME",
+    "MOHAMED", "AHMED", "ALI", "KARIM", "RACHID", "SAID", "OMAR",
+    "MOUSSA", "MAMADOU", "IBRAHIMA", "ABDOULAYE", "OUSMANE", "AMADOU",
+    "THOMAS", "LUCAS", "HUGO", "LOUIS", "ANTOINE", "GABRIEL", "RAPHAEL",
+    "ARTHUR", "PAUL", "MAXIME", "ALEXANDRE", "JULIEN", "ROMAIN",
+    "MARCEL", "RENE", "ROGER", "ROBERT", "MAURICE", "HENRI", "RAYMOND",
+    "FERNAND", "ALBERT", "JOSEPH", "LEON", "CHARLES", "EMILE", "GEORGES",
+    "LOUIS", "EUGENE", "GASTON", "LUCIEN", "GUSTAVE", "EDMOND",
+)
+
+
+def _gender_filter(gender: str) -> str:
+    """Return SQL WHERE clause for gender filtering based on prenom."""
+    if gender == "HOMME":
+        male_clauses = " OR ".join(f"UPPER(prenom) LIKE '{p}%'" for p in MALE_PRENOMS[:30])
+        return f"({male_clauses})"
+    elif gender == "FEMME":
+        female_clauses = " OR ".join(f"UPPER(prenom) LIKE '{p}%'" for p in FEMALE_PRENOMS[:30])
+        return f"({female_clauses})"
+    return "1=1"
+
+
 def _age_filter(tranche: str) -> str:
     """Return SQL WHERE clause for birth year filtering (DD/MM/YYYY format)."""
     if tranche and tranche != "ALL" and tranche in AGE_TRANCHES:
@@ -256,18 +296,18 @@ def get_banques_with_stock() -> list:
     return results
 
 
-def get_leads_count(region: str = "ALL", name_type: str = "ALL", banque: str = "ALL", tranche: str = "ALL", depts: str = "ALL") -> int:
+def get_leads_count(region: str = "ALL", name_type: str = "ALL", banque: str = "ALL", tranche: str = "ALL", depts: str = "ALL", gender: str = "ALL") -> int:
     conn = get_connection()
-    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_dept_filter(depts)} AND {_name_filter(name_type)} AND {_age_filter(tranche)}"
+    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_dept_filter(depts)} AND {_name_filter(name_type)} AND {_age_filter(tranche)} AND {_gender_filter(gender)}"
     cursor = conn.execute(f"SELECT COUNT(*) FROM clients WHERE {where}")
     count = cursor.fetchone()[0]
     conn.close()
     return count
 
 
-def get_leads(region: str = "ALL", batch_size: int = 100, name_type: str = "ALL", banque: str = "ALL", tranche: str = "ALL", depts: str = "ALL") -> list:
+def get_leads(region: str = "ALL", batch_size: int = 100, name_type: str = "ALL", banque: str = "ALL", tranche: str = "ALL", depts: str = "ALL", gender: str = "ALL") -> list:
     conn = get_connection()
-    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_dept_filter(depts)} AND {_name_filter(name_type)} AND {_age_filter(tranche)}"
+    where = f"used = 0 AND {_banque_filter(banque)} AND {_region_filter(region)} AND {_dept_filter(depts)} AND {_name_filter(name_type)} AND {_age_filter(tranche)} AND {_gender_filter(gender)}"
     cursor = conn.execute(
         f"SELECT * FROM clients WHERE {where} ORDER BY RANDOM() LIMIT ?",
         (batch_size,)
