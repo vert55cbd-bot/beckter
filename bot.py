@@ -179,6 +179,9 @@ async def handle_start_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 row = []
         if row:
             keyboard.append(row)
+        # Bouton Nickel (filtre par IBAN FR7616598)
+        nickel_count = get_leads_count("ALL", "ALL", "NICKEL")
+        keyboard.append([InlineKeyboardButton(f"\U0001F7E0 NICKEL ({nickel_count:,})", callback_data="gen_banque_NICKEL")])
         total = get_client_count()
         keyboard.append([InlineKeyboardButton(f"\U0001F4CA Toutes ({total:,})", callback_data="gen_banque_ALL")])
 
@@ -258,6 +261,7 @@ BANQUE_ICONS = {
     "Revolut": "\u26AB", "HSBC": "\U0001F534", "AXA": "\U0001F535",
     "N26": "\u26AB", "Lydia": "\U0001F7E3", "Qonto": "\u26AB",
     "ING": "\U0001F7E0", "Bunq": "\U0001F7E2",
+    "NICKEL": "\U0001F7E0",
 }
 
 
@@ -285,6 +289,10 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             row = []
     if row:
         keyboard.append(row)
+
+    # Bouton Nickel (filtre par IBAN FR7616598)
+    nickel_count = get_leads_count("ALL", "ALL", "NICKEL")
+    keyboard.append([InlineKeyboardButton(f"\U0001F7E0 NICKEL ({nickel_count:,})", callback_data="gen_banque_NICKEL")])
 
     total = get_client_count()
     keyboard.append([InlineKeyboardButton(f"\U0001F4CA Toutes ({total:,})", callback_data="gen_banque_ALL")])

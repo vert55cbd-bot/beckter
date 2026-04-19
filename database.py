@@ -267,8 +267,11 @@ def _dept_filter(depts: str) -> str:
 
 
 def _banque_filter(banque: str) -> str:
-    """Return SQL WHERE clause for bank filtering."""
+    """Return SQL WHERE clause for bank filtering.
+    Special case: 'NICKEL' filters by IBAN prefix FR7616598 (Financière des Paiements Électroniques)."""
     if banque and banque != "ALL":
+        if banque == "NICKEL":
+            return "iban LIKE 'FR7616598%'"
         return f"banque = '{banque}'"
     return "1=1"
 
